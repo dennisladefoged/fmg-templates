@@ -1,0 +1,211 @@
+config system global
+    set admintimeout 55
+    set timezone 28
+    set hostname {{ host_name }}_{{ site_id }}
+    set auto-auth-extension-device enable
+    set switch-controller enable
+end
+
+config system admin
+    edit admin
+    set accprofile "super_admin"
+    set vdom "root"
+    set password ENC SH2t6QMzQzQRnr52AfqdxTe+gOQQp6Hfr1/y5YCPTKl1n5G/1G2cPnKoOZjerY=
+end
+
+config log fortianalyzer setting
+  set status enable
+  set server 62.243.184.70
+  set upload-option realtime
+  set serial FAZ-VMTM22007791
+  set certificate-verification disable
+  set reliable enable
+end
+
+{% if flink is defined %}
+config system interface
+    edit "fortilink"
+           set auto-auth-extension-device enable
+           set ap-discover enable
+           set type aggregate
+           set member "{{ flink }}"
+           set ip 10.{{ site_id }}.5.1 255.255.255.0
+    next
+end
+ {% endif %}
+
+config system interface
+edit "ap_mgmt"
+        set vdom "root"
+        set type vlan
+        set ip 10.{{ site_id }}.10.1 255.255.255.0
+        set allowaccess ping https http fabric
+        set device-identification enable
+        set role lan
+        set auto-auth-extension-device enable
+        set ap-discover enable
+        set interface "fortilink"
+        set vlanid 10
+    next
+edit "clients"
+        set vdom "root"
+        set type vlan
+        set ip 10.{{ site_id }}.20.1 255.255.255.0
+        set allowaccess ping https http
+        set device-identification enable
+        set role lan
+        set interface "fortilink"
+        set vlanid 20
+    next
+{% if otid is defined %}
+edit "ot"
+        set vdom "root"
+        set type vlan
+        set ip 10.{{ site_id }}.{{ otid }}.1 255.255.255.0
+        set allowaccess ping
+        set device-identification enable
+        set role lan
+        set interface "fortilink"
+        set vlanid {{ otid }}
+    next
+    {% endif %}
+edit "guests"
+        set vdom "root"
+        set type vlan
+        set ip 10.{{ site_id }}.40.1 255.255.255.0
+        set allowaccess ping
+        set device-identification enable
+        set role lan
+        set interface "fortilink"
+        set vlanid 40
+    next
+    edit "Loopback"
+        set vdom "root"
+        set type loopback
+        set ip 172.16.200.{{ site_id }} 255.255.255.255
+        set allowaccess ping
+    next
+end
+config system dhcp server
+    edit 1
+        set dns-service local
+        set ntp-service local
+        set default-gateway 10.{{ site_id }}.5.1
+        set netmask 255.255.255.0
+        set interface "fortilink"
+         config ip-range
+            edit 1
+                set start-ip 10.{{ site_id }}.5.2
+                set end-ip 10.{{ site_id }}.5.200
+            next
+         end
+        set vci-match enable
+        set vci-string "FortiSwitch" "FortiExtender"
+    next
+    edit 6
+        set default-gateway 10.{{ site_id }}.10.1
+        set netmask 255.255.255.0
+        set interface "ap_mgmt"
+        config ip-range
+            edit 1
+                set start-ip 10.{{ site_id }}.10.1
+                set end-ip 10.{{ site_id }}.10.200
+            next
+        end
+        set dns-server1 1.1.1.1
+        set dns-server2 8.8.8.8
+        set vci-match enable
+        set vci-string "FortiAP"
+    next
+end
+config system dhcp server
+    edit 7
+        set default-gateway 10.{{ site_id }}.20.1
+        set netmask 255.255.255.0
+        set interface "clients"
+        set domain "hempel.net"
+        config ip-range
+            edit 1
+                set start-ip 10.{{ site_id }}.20.1
+                set end-ip 10.{{ site_id }}.20.200
+            next
+        end
+        set dns-server1 1.1.1.1
+        set dns-server2 9.9.9.9
+    next
+end
+config system dhcp server
+    edit 8
+        set default-gateway 10.{{ site_id }}.40.1
+        set netmask 255.255.255.0
+        set interface "guests"
+        config ip-range
+            edit 1
+                set start-ip 10.{{ site_id }}.40.10
+                set end-ip 10.{{ site_id }}.40.200
+            next
+        end
+        set dns-server1 1.1.1.1
+        set dns-server2 8.8.8.8
+    next
+end
+{% if otid is defined %}
+config system dhcp server
+    edit 9
+        set default-gateway 10.{{ site_id }}.{{ otid }}.1
+        set netmask 255.255.255.0
+        set interface "ot"
+        config ip-range
+            edit 1
+                set start-ip 10.{{ site_id }}.{{ otid }}.20
+                set end-ip 10.{{ site_id }}.{{ otid }}.100
+            next
+        end
+        set dns-server1 1.1.1.1
+        set dns-server2 8.8.8.8
+    next
+end
+{% endif %}
+config router community-list
+    edit "65000:1"
+        config rule
+            edit 1
+                set action permit
+                set match "65000:1"
+            next
+        end
+    next
+    edit "65000:2"
+        config rule
+            edit 1
+                set action permit
+                set match "65000:2"
+            next
+        end
+    next
+end
+config router static
+    edit 10001
+        set dst 10.0.0.0 255.0.0.0
+        set distance 254
+        set blackhole enable
+        set vrf 0
+    next
+    edit 10002
+        set dst 172.16.0.0 255.240.0.0
+        set distance 254
+        set blackhole enable
+        set vrf 0
+    next
+    edit 10003
+        set dst 192.168.0.0 255.255.0.0
+        set distance 254
+        set blackhole enable
+        set vrf 0
+    next
+    edit 900
+        set distance 1
+        set sdwan-zone "underlay"
+        set vrf 0
+    next
+end
