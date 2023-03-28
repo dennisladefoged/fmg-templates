@@ -1,0 +1,145 @@
+config vpn ipsec phase1-interface
+    edit "HUB1-VPN1"
+        set interface "{{ wanif1 }}"
+        set ike-version 2
+        set peertype any
+        set net-device enable
+        set mode-cfg enable
+        set proposal aes256-sha512
+        set dhgrp 21
+        set add-route disable
+        set localid Site{{ site_id }}
+        set auto-discovery-receiver enable
+        set network-overlay enable
+        set network-id 1
+        set remote-gw 198.18.5.2
+        set psksecret fortinetsecret
+        set nattraversal forced
+    next
+    edit "HUB1-VPN2"
+      {% if wanif2 is defined %}
+        set interface "{{ wanif2 }}"
+      {% else %}
+        set interface "{{ wanif1 }}"
+      {% endif %}
+        set ike-version 2
+        set peertype any
+        set net-device enable
+        set mode-cfg enable
+        set proposal aes256-sha512
+        set dhgrp 21
+        set add-route disable
+        set localid Site{{ site_id }}
+        set auto-discovery-receiver enable
+        set network-overlay enable
+        set network-id 2
+        set remote-gw 198.18.6.2
+        set psksecret fortinetsecret
+        set nattraversal forced
+    next
+end
+
+config vpn ipsec phase2-interface
+    edit "HUB1-VPN1"
+        set phase1name "HUB1-VPN1"
+        set proposal aes256-sha256
+        set dhgrp 19
+        set auto-negotiate enable
+    next
+    edit "HUB1-VPN2"
+        set phase1name "HUB1-VPN2"
+        set proposal aes256-sha256
+        set dhgrp 19
+        set auto-negotiate enable
+    next
+end
+
+config router static
+    edit 1001
+        set dst 10.255.255.0 255.255.255.0
+        set device "HUB1-VPN1"
+    next
+    edit 1002
+        set dst 10.255.254.0 255.255.255.0
+        set device "HUB1-VPN2"
+    next
+end
+
+config router route-map
+    edit "HUB1-VPN1-IN"
+        config rule
+            edit 1
+                set match-community "65000:1"
+                set set-local-preference 101
+            next
+            edit 2
+                set match-community "65000:2"
+                set set-local-preference 98
+            next
+        end
+    next
+    edit "HUB1-VPN2-IN"
+        config rule
+            edit 1
+                set match-community "65000:1"
+                set set-local-preference 98
+            next
+            edit 2
+                set match-community "65000:2"
+                set set-local-preference 101
+            next
+        end
+    next
+    edit "HUB1-VPN1-OUT"
+        config rule
+            edit 1
+                set set-community "65000:1"
+            next
+        end
+    next
+    edit "HUB1-VPN2-OUT"
+        config rule
+            edit 1
+                set set-community "65000:2"
+            next
+        end
+    next
+end
+
+config router bgp
+    set as 65000
+    set router-id 172.16.200.{{ site_id }}
+    set network-import-check disable
+    set ibgp-multipath enable
+    set additional-path enable
+    set graceful-restart enable
+    set additional-path-select 4
+    config neighbor
+        edit "10.255.255.253"
+            set capability-graceful-restart enable
+            set link-down-failover enable
+            set remote-as 65000
+            set route-map-in "HUB1-VPN1-IN"
+            set route-map-out "HUB1-VPN1-OUT"
+            set additional-path receive
+        next
+        edit "10.255.254.253"
+            set capability-graceful-restart enable
+            set link-down-failover enable
+            set remote-as 65000
+            set route-map-in "HUB1-VPN2-IN"
+            set route-map-out "HUB1-VPN2-OUT"
+            set additional-path receive
+        next
+    end
+    config network
+        edit 1
+            set prefix 10.{{ site_id }}.0.0 255.255.0.0
+        next
+        {% if otid is defined %}
+        edit 2
+            set prefix 10.{{ site_id }}.{{ otid }}.0 255.255.255.0
+        next
+        {% endif %}
+    end
+end
