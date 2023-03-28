@@ -1,0 +1,100 @@
+config firewall address
+    edit "corp"
+        set subnet 10.0.0.0 255.0.0.0
+    next
+end
+config system sdwan
+    set status enable
+    config zone
+        edit "virtual-wan-link"
+        next
+        edit "SASE"
+        next
+        edit "underlay"
+        next
+        edit "overlay"
+        next
+    end
+    config members
+        edit 1
+            set interface "{{ wanif1 }}"
+            set zone "underlay"
+            {% if wan1_gtw is defined %}
+            set gateway "{{ wan1_gtw }}"
+            {% endif %}
+        next
+        edit 2
+            set interface "{{ wanif2 }}"
+            set zone "underlay"
+            {% if wan2_gtw is defined %}
+            set gateway "{{ wan2_gtw }}"
+            {% endif %}
+        next
+        edit 3
+            set interface "HUB1-VPN1"
+            set zone "overlay"
+            set cost 10
+        next
+        edit 4
+            set interface "HUB1-VPN2"
+            set zone "overlay"
+            set cost 10
+        next
+    end
+    config health-check
+        edit "HUB"
+            set server "10.99.60.1"
+            set sla-fail-log-period 10
+            set sla-pass-log-period 10
+            set members 3 4
+            config sla
+                edit 1
+                    set link-cost-factor latency packet-loss
+                    set latency-threshold 150
+                    set packetloss-threshold 10
+                next
+            end
+        next
+        edit "INET"
+            set server "8.8.4.4"
+            set sla-fail-log-period 10
+            set sla-pass-log-period 10
+            set members 1 2
+            config sla
+                edit 1
+                    set link-cost-factor latency packet-loss
+                    set latency-threshold 200
+                    set packetloss-threshold 5
+                next
+            end
+        next
+    end
+    config service
+        edit 1
+            set name "corp"
+            set mode sla
+            set dst "corp"
+            set src "corp"
+            set hold-down-time 20
+            config sla
+                edit "HUB"
+                    set id 1
+                next
+            end
+            set priority-members 3 4
+            set tie-break fib-best-match
+        next
+        edit 2
+            set name "DIA-critical-saas"
+            set mode load-balance
+            set internet-service enable
+            set internet-service-name "Microsoft-Azure" "Microsoft-Office365"
+            config sla
+                edit "INET"
+                    set id 1
+                next
+            end
+            set priority-members 1 2
+        next
+    end
+end
